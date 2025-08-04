@@ -118,3 +118,56 @@ def readings_by_fuel(fuel: str):
     with database.SessionLocal() as db:
         rows = db.execute(stmt).all()
         return [{"date": str(d), "units": u} for d, u in rows]
+    
+from datetime import date
+from sqlalchemy import text
+
+@app.get("/report/revenue-today")
+def revenue_today():
+    """
+    Returns revenue for *today*:
+      petrol  = units_sold_today_petrol  × petrol_rate_today
+      diesel  = units_sold_today_diesel  × diesel_rate_today
+      total   = petrol + diesel
+    """
+    today = date.today()
+
+    sql = text("""
+        WITH deltas AS (
+          SELECT
+            p.fuel_type               AS fuel,
+            pr.reading_date           AS d,
+            /* today's units minus yesterday's units for this pump */
+            pr.units - COALESCE(
+               LAG(pr.units) OVER (
+                   PARTITION BY pr.pump_id ORDER BY pr.reading_date
+               ),
+               pr.units
+            ) AS units_sold
+          FROM pump_readings pr
+          JOIN pumps p ON p.id = pr.pump_id
+          WHERE pr.reading_date = :today
+        )
+        SELECT
+          d.fuel                              AS fuel_type,
+          SUM(d.units_sold * fr.rate_per_unit) AS revenue
+        FROM deltas d
+        JOIN fuel_rates fr
+             ON fr.date       = :today
+            AND fr.fuel_type  = d.fuel
+        GROUP BY d.fuel;
+    """)
+
+    petrol = diesel = 0.0
+    with database.SessionLocal() as db:
+        for fuel, rev in db.execute(sql, {"today": today}):
+            if fuel == "petrol":
+                petrol = rev
+            else:
+                diesel = rev
+
+    return {
+        "petrol": round(petrol, 2),
+        "diesel": round(diesel, 2),
+        "total":  round(petrol + diesel, 2),
+    }

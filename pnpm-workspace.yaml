@@ -1,2 +1,6 @@
 packages:
   - renderer
+
+onlyBuiltDependencies:
+  - electron
+  - esbuild

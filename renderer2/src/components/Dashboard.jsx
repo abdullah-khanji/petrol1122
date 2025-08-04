@@ -1,83 +1,116 @@
-// renderer/src/components/Dashboard.jsx
-import { useEffect, useState } from 'react';
-import { Line }  from 'react-chartjs-2';
+import { useEffect, useState } from "react";
+import { Line } from "react-chartjs-2";
 import {
   Chart as ChartJS,
-  LineElement, PointElement, CategoryScale,
-  LinearScale, Tooltip, Legend,
-} from 'chart.js';
-import api from '../api';
+  LineElement,
+  PointElement,
+  CategoryScale,
+  LinearScale,
+  Tooltip,
+  Legend,
+} from "chart.js";
+import api from "../api";
 
-ChartJS.register(LineElement, PointElement, CategoryScale, LinearScale, Tooltip, Legend);
+ChartJS.register(
+  LineElement,
+  PointElement,
+  CategoryScale,
+  LinearScale,
+  Tooltip,
+  Legend
+);
 
 export default function Dashboard() {
+  /* ---------- state ---------- */
+  const [cards, setCards] = useState({ petrol: "—", diesel: "—", total: "—" });
   const [chart, setChart] = useState({ labels: [], datasets: [] });
 
-  /* one fetch on mount -------------------------------------------------- */
+  /* ---------- data fetch ---------- */
   useEffect(() => {
-    Promise.all([
-      api.get('/readings/petrol'),
-      api.get('/readings/diesel'),
-    ])
-      .then(([petrolRes, dieselRes]) => {
-        /* keep every reading date (they're already sorted) */
-        const labels = petrolRes.data.map((r) => r.date);
+    /* revenue cards */
+    api
+      .get("/report/revenue-today")
+      .then((r) => setCards(r.data))
+      .catch(() => setCards({ petrol: "—", diesel: "—", total: "—" }));
 
-        setChart({
-          labels,
-          datasets: [
-            {
-              label: 'Petrol',
-              data: petrolRes.data.map((r) => r.units),
-              borderColor: '#28a745',     // green
-              backgroundColor: '#28a745',
-              tension: 0.3,
-              pointRadius: 4,
-              pointHoverRadius: 6,
-              borderWidth: 2,
-            },
-            {
-              label: 'Diesel',
-              data: dieselRes.data.map((r) => r.units),
-              borderColor: '#fd7e14',     // orange
-              backgroundColor: '#fd7e14',
-              tension: 0.3,
-              pointRadius: 4,
-              pointHoverRadius: 6,
-              borderWidth: 2,
-            },
-          ],
-        });
-      })
-      .catch(() => setChart({ labels: [], datasets: [] }));
+    /* twin-line chart (petrol + diesel units) */
+    Promise.all([
+      api.get("/readings/petrol"),
+      api.get("/readings/diesel"),
+    ]).then(([pt, ds]) => {
+      setChart({
+        labels: pt.data.map((r) => r.date),
+        datasets: [
+          {
+            label: "Petrol",
+            data: pt.data.map((r) => r.units),
+            borderColor: "#28a745",
+            backgroundColor: "#28a745",
+            tension: 0.3,
+            borderWidth: 2,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+          },
+          {
+            label: "Diesel",
+            data: ds.data.map((r) => r.units),
+            borderColor: "#fd7e14",
+            backgroundColor: "#fd7e14",
+            tension: 0.3,
+            borderWidth: 2,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+          },
+        ],
+      });
+    });
   }, []);
 
   const options = {
     responsive: true,
     plugins: {
-      legend: { position: 'top', labels: { boxWidth: 12, boxHeight: 12 } },
-      tooltip: { mode: 'index', intersect: false },
+      legend: { position: "top", labels: { boxWidth: 12, boxHeight: 12 } },
+      tooltip: { mode: "index", intersect: false },
     },
-    interaction: { mode: 'index', intersect: false },
-    scales: {
-      y: { grid: { color: '#e0e0e0' } },
-      x: { grid: { display: false } },
-    },
+    interaction: { mode: "index", intersect: false },
+    scales: { x: { display: false }, y: { display: false } }, // hide both axes
   };
 
+  /* ---------- render ---------- */
   return (
     <>
-      <div className="row">
-        <div className="col-6">
-      <h5 className="mb-3">Daily Units – Petrol (green) vs Diesel (orange)</h5>
-          <Line data={chart} options={options}/>
+      {/* summary cards */}
+      <div className="row g-3 mb-4">
+        <div className="col">
+          <StatCard title="Petrol Revenue" value={cards.petrol} />
         </div>
-
-        {/* optional right-hand column for anything else */}
-        <div className="col-6">
-          {/* Put another chart, table, or leave blank for now */}
+        <div className="col">
+          <StatCard title="Diesel Revenue" value={cards.diesel} />
+        </div>
+        <div className="col">
+          <StatCard title="Total Revenue" value={cards.total} />
         </div>
       </div>
+
+      {/* twin-line chart (half-width) */}
+      <div className="row">
+        <div className="col-6">
+          <Line data={chart} options={options} />
+        </div>
+        <div className="col-6" />
+      </div>
     </>
+  );
+}
+
+/* tiny reusable card */
+function StatCard({ title, value, danger }) {
+  return (
+    <div className={`card ${danger ? "border-danger" : ""}`}>
+      <div className="card-body">
+        <h6 className="card-title text-muted">{title}</h6>
+        <h4 className={`card-text ${danger ? "text-danger" : ""}`}>{value}</h4>
+      </div>
+    </div>
   );
 }
