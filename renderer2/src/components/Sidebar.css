@@ -1,0 +1,15 @@
+/* renderer/src/components/Sidebar.css */
+.sidebar {
+  width: 200px;
+  min-height: 100vh;          /* full-height column */
+}
+
+.sidebar .nav-link.active {
+  background-color: #0d6efd;  /* Bootstrap primary */
+  color: #fff !important;
+  border-radius: 0.25rem;
+}
+
+.sidebar .nav-link:hover {
+  background-color: rgba(255,255,255,0.1);
+}

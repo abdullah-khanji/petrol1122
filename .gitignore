@@ -1,0 +1,17 @@
+# ---- Node / pnpm / Vite -------------------------------------------------
+node_modules/
+.pnpm-store/
+dist/                 # electron-builder output
+renderer/dist/
+
+# ---- Python -------------------------------------------------------------
+.venv/
+__pycache__/
+*.py[cod]
+# SQLite DB
+fuel.db
+
+# ---- VS Code & OS clutter ----------------------------------------------
+.vscode/
+.DS_Store
+Thumbs.db
