@@ -18,23 +18,14 @@ class PumpReading(Base):
     reading_date  = Column(Date,    nullable=False)
     units         = Column(Float,   nullable=False)  # odometer reading
     rate_per_unit = Column(Float,   nullable=False)  # buying rate PKR/L
+    meter_reading = Column(Float,   nullable=False)
 
 class ReadingIn(BaseModel):
     pump_id:       int
     reading_date:  date
     units:         float
     rate_per_unit: float
-# class FuelRate(Base):
-#     __tablename__ = 'fuel_rates'
-#     id = Column(Integer, primary_key=True)
-#     date = Column(Date, nullable=False)
-#     fuel_type = Column(String, nullable=False)
-#     rate_per_unit = Column(Float, nullable=False)
-
-# class ReadingIn(BaseModel):
-#     pump_id: int
-#     reading_date: date
-#     units: float
+    meter_reading: float
 
 
 class BuyingUnitRate(Base):
@@ -55,8 +46,8 @@ def _calc_running_total(mapper, connection, target):
     """
     prev_total = connection.execute(
         text(
-            "SELECT total_units FROM fuel_rates "
-            "WHERE fuel_type = :ft ORDER BY id DESC LIMIT 1"
+            "SELECT total_units FROM buying_unit_rate"
+            " WHERE fuel_type = :ft ORDER BY id DESC LIMIT 1"
         ),
         {"ft": target.fuel_type},
     ).scalar()

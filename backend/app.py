@@ -3,7 +3,11 @@ from datetime import date
 import models, database
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from typing import List
+from pydantic import BaseModel, Field
+from sqlalchemy import select, func
 
+import models, database
 app = FastAPI()
 # allow the Vite dev server & Electron file:// origin
 origins = [
@@ -35,118 +39,39 @@ async def add_reading(r: models.ReadingIn):
 # backend/app.py  – append near the bottom
 from sqlalchemy import text
 
-@app.get('/report/summary')
-def summary():
-    with database.SessionLocal() as db:
-        total  = db.execute(text("""
-            SELECT SUM((pr.units) * fr.rate_per_unit)
-            FROM pump_readings pr
-            JOIN fuel_rates fr ON fr.date = pr.reading_date
-              AND fr.fuel_type = (SELECT fuel_type FROM pumps WHERE id = pr.pump_id)
-        """)).scalar() or 0
-
-        petrol = db.execute(text("""
-            SELECT SUM(pr.units * fr.rate_per_unit)
-            FROM pump_readings pr
-            JOIN pumps p  ON p.id = pr.pump_id AND p.fuel_type='petrol'
-            JOIN fuel_rates fr ON fr.date = pr.reading_date AND fr.fuel_type='petrol'
-        """)).scalar() or 0
-
-        diesel = db.execute(text("""
-            SELECT SUM(pr.units * fr.rate_per_unit)
-            FROM pump_readings pr
-            JOIN pumps p  ON p.id = pr.pump_id AND p.fuel_type='diesel'
-            JOIN fuel_rates fr ON fr.date = pr.reading_date AND fr.fuel_type='diesel'
-        """)).scalar() or 0
-
-        # example: 7-day loss = negative revenue rows in the last 7 days
-        loss7 = db.execute(text("""
-            WITH diff AS (
-              SELECT (pr.units -
-                     COALESCE((
-                       SELECT pr2.units FROM pump_readings pr2
-                       WHERE pr2.pump_id = pr.pump_id
-                         AND pr2.reading_date = date(pr.reading_date, '-1 day')
-                     ), pr.units)
-                     ) * fr.rate_per_unit AS rev
-              FROM pump_readings pr
-              JOIN fuel_rates fr
-                   ON fr.date = pr.reading_date
-                   AND fr.fuel_type =
-                       (SELECT fuel_type FROM pumps WHERE id = pr.pump_id)
-              WHERE pr.reading_date >= date('now', '-7 days')
-            )
-            SELECT ABS(SUM(rev)) FROM diff WHERE rev < 0;
-        """)).scalar() or 0
-
-        return {
-            "total":  round(total,  2),
-            "petrol": round(petrol, 2),
-            "diesel": round(diesel, 2),
-            "loss7":  round(loss7, 2)
-        }
-
-@app.get('/checking')
-def ok():
-    with database.SessionLocal() as db:
-        rows = db.execute(
-        text("""
-            SELECT * FROM PumpReading;
-        """)                         # ← the whole string wrapped in text(...)
-        ).fetchall()
-        return {"rows": rows}
-    
-
-
-
-
 from datetime import date
 from sqlalchemy import text
 
 
 SQL_BY_RATE = text("""
-SELECT
-    fr.rate_per_unit,
-    SUM(pr.units)                       AS total_units,
-    SUM(pr.units) * fr.rate_per_unit    AS total_revenue
-FROM pump_readings AS pr
-JOIN pumps        AS p  ON p.id         = pr.pump_id
-JOIN fuel_rates   AS fr ON fr.fuel_type = p.fuel_type
-                        AND fr.date    = pr.reading_date
-WHERE p.fuel_type = :fuel                     --  ←─ only the value is bound; query stays the same
-GROUP BY fr.rate_per_unit
-ORDER BY fr.rate_per_unit;
-""")
 
-sql_buy_rate=text("""
-    SELECT * FROM buying_unit_rate;
-    """)
+SELECT pr.rate_per_unit, SUM(pr.units) as total_units
+FROM pump_readings pr
+JOIN pumps AS p ON p.id=pr.pump_id
+WHERE p.fuel_type=:fuel
+GROUP BY pr.rate_per_unit ORDER BY pr.rate_per_unit
+;
+""")
+# rows= db.execute(sql_text, {"fuel": fuel}).all()
+        
 from decimal import Decimal
 @app.get("/report/revenue-cumulative")
 def revenue_by_rate():
     out = {"petrol": [], "diesel": []}
-    grand_units = Decimal("0")
-    grand_revenue = Decimal("0")
-    total_buy=Decimal("0")
+    p_grand_units = Decimal("0")
+    d_grand_units = Decimal("0")
 
     with database.SessionLocal() as db:
-        for fuel in ("petrol", "diesel"):
-            rows = db.execute(SQL_BY_RATE, {"fuel": fuel}).all()
-            for rate, units, revenue in rows:
-                # accumulate grand totals while we iterate
-                grand_units   += Decimal(units)
-                grand_revenue += Decimal(revenue)
-
-                out[fuel].append({
-                    "rate_per_unit": float(rate),
-                    "units"        : float(units),
-                    "revenue"      : float(revenue)
-                })
-    total=out["diesel"][0]['revenue']+out["petrol"][0]['revenue']
-    out["total"] = {
-        "revenue"  : float(total)
-    }
-    print(out)
+        rows = db.execute(SQL_BY_RATE, {"fuel": 'petrol'}).all()
+        for rate, units in rows:
+            # accumulate grand totals while we iterate
+            p_grand_units   += Decimal(units)
+        rows = db.execute(SQL_BY_RATE, {"fuel": 'diesel'}).all()
+        for rate, units in rows:
+            # accumulate grand totals while we iterate
+            d_grand_units   += Decimal(units)
+    out["petrol"]={"units": p_grand_units}
+    out["diesel"]={"units": d_grand_units}
     return out
 
 from sqlalchemy import select, func, and_
@@ -193,3 +118,157 @@ def readings_by_fuel(fuel: str):
         }
         for date, units, rate in rows
     ]
+    
+    
+    
+sql_text=text("""
+    WITH latest_buy AS (                   -- only PETROL purchases
+    SELECT
+        bur.fuel_type,
+        bur.buying_rate_per_unit,
+        bur.date                                   AS start_date,
+        LEAD(bur.date) OVER (
+            PARTITION BY bur.fuel_type
+            ORDER BY   bur.date
+        )                                          AS end_date
+    FROM buying_unit_rate bur
+    WHERE bur.fuel_type = :fuel                 -- ←─ filter
+    )
+
+    SELECT
+    pr.id,
+    pr.reading_date,
+    p.fuel_type,
+    pr.units,
+    pr.rate_per_unit                              AS selling_price,
+
+    lb.buying_rate_per_unit                       AS recent_buy_price,
+    ROUND(pr.units * lb.buying_rate_per_unit, 2)  AS cost_amount,
+    ROUND(pr.units * pr.rate_per_unit,       2)   AS revenue_amount
+    FROM pump_readings pr
+    JOIN pumps       p  ON p.id = pr.pump_id
+    JOIN latest_buy  lb ON lb.fuel_type = p.fuel_type
+                    AND pr.reading_date >= lb.start_date
+                    AND (lb.end_date IS NULL OR pr.reading_date < lb.end_date)
+    WHERE p.fuel_type = :fuel                       -- ←─ filter (outer)
+    ORDER BY pr.reading_date, pr.id;
+    """)
+    
+    
+@app.get('/readings3/{fuel}')
+def getting_revenue(fuel: str):
+    with database.SessionLocal() as db:
+        # for fuel in ("petrol", "diesel"):
+        #     rows = db.execute(sql_text, {"fuel": fuel}).mappings().all()
+        #     rows = [dict(r) for r in rows]
+            
+        #     total_revenue= round(sum(row['revenue_amount'] for row in rows),2)
+        #     print(total_revenue)
+        
+        if fuel not in {"petrol", "diesel"}:
+            raise HTTPException(400, "fuel must be 'petrol' or 'diesel'")
+        rows= db.execute(sql_text, {"fuel": fuel}).all()
+        
+        total_revenue=round(sum(row[7] for row in rows), 2)
+        total_cost= round(sum(row[6] for row in rows), 2)
+        
+        return {
+            "total_revenue":total_revenue,
+            "total_cost":total_cost,
+            "detail":[
+        {
+            "date": str(reading_date),
+            "fuel_type": fuel_type,
+            "units": units,
+            "recent_buy_price":recent_buy_price,
+            "selling_price":selling_price,
+            "cost_amount": float(cost_amount),
+            "revenue_amount": float(revenue_amount)
+        }
+        for id, reading_date, fuel_type, units, selling_price,recent_buy_price, cost_amount, revenue_amount in rows
+    ]}
+
+
+
+# ── schema used by POST ----------------------------------------------------
+class ReadingInput(BaseModel):
+    pump_id:        int
+    previous_meter: float = Field(..., ge=0)
+    current_meter:  float = Field(..., ge=0)
+    unit_rate:      float = Field(..., ge=0)
+
+
+# ── GET: fetch default values for the entry table --------------------------
+@app.get("/pumps/latest-meters")
+def latest_meters():
+    """
+    Returns one row per pump:
+       {pump_id, pump_name, fuel_type, previous_meter, unit_rate}
+    `previous_meter` and `unit_rate` are pulled from the most recent reading;
+    0 if none exist yet.
+    """
+    with database.SessionLocal() as db:
+        pumps = db.query(models.Pump).all()
+        rows  = []
+
+        for pump in pumps:
+            prev_meter = (
+                db.execute(
+                    select(models.PumpReading.meter_reading)
+                    .where(models.PumpReading.pump_id == pump.id)
+                    .order_by(models.PumpReading.reading_date.desc())
+                    .limit(1)
+                ).scalar()
+            ) or 0
+
+            latest_rate = (
+                db.execute(
+                    select(models.PumpReading.rate_per_unit)
+                    .where(models.PumpReading.pump_id == pump.id)
+                    .order_by(models.PumpReading.reading_date.desc())
+                    .limit(1)
+                ).scalar()
+            ) or 0
+
+            rows.append({
+                "pump_id"       : pump.id,
+                "pump_name"     : pump.name,
+                "fuel_type"     : pump.fuel_type,
+                "previous_meter": round(prev_meter,3),
+                "unit_rate"     : round(latest_rate, 3),
+            })
+
+        return rows
+
+
+# ── POST: store the readings the user submits ------------------------------
+@app.post("/pumps/readings")
+def add_readings(readings: List[ReadingInput]):
+    today = date.today()
+    inserted = []
+
+    with database.SessionLocal() as db:
+        for r in readings:
+            pump = db.get(models.Pump, r.pump_id)
+            if not pump:
+                raise HTTPException(404, f"Pump {r.pump_id} not found")
+
+            if r.current_meter < r.previous_meter:
+                raise HTTPException(
+                    400,
+                    f"Current meter < previous meter for pump {r.pump_id}"
+                )
+
+            units = r.current_meter - r.previous_meter
+            db.add(models.PumpReading(
+                pump_id       = r.pump_id,
+                reading_date  = today,
+                units         = units,
+                rate_per_unit = r.unit_rate,
+                meter_reading = r.current_meter,
+            ))
+            inserted.append({"pump_id": r.pump_id, "units": units})
+
+        db.commit()
+
+    return {"inserted": len(inserted), "detail": inserted}    
