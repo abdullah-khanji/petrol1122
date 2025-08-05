@@ -1,13 +1,12 @@
 from datetime import date, timedelta
 import random
-
 import models, database
 
-random.seed(42)              # remove for non-repeatable randomness
+random.seed(42)
 models.Base.metadata.create_all(bind=database.engine)
 
 with database.SessionLocal() as db:
-    # ── pumps (if not present) ──────────────────────────────────────────
+    # pumps
     if not db.query(models.Pump).count():
         db.add_all([
             models.Pump(id=1, name="Pump 1", fuel_type="petrol"),
@@ -16,34 +15,28 @@ with database.SessionLocal() as db:
             models.Pump(id=4, name="Pump 4", fuel_type="diesel"),
         ])
 
-    # ── price table (static sample) ─────────────────────────────────────
-    today   = date.today()
-    span    = 60                                    # ~2 months
-    dates   = [today - timedelta(days=i) for i in range(span)][::-1]
+    today  = date.today()
+    span   = 60                           # last two months
+    dates  = [today - timedelta(days=i) for i in range(span)][::-1]
 
-    for d in dates:
-        db.add_all([
-            models.FuelRate(date=d, fuel_type="petrol", rate_per_unit=272.5),
-            models.FuelRate(date=d, fuel_type="diesel", rate_per_unit=288.4),
-        ])
-
-    # ── daily *random* units, no cumulative pattern ─────────────────────
     for d in dates:
         # petrol pumps
         for pid in (1, 2):
             db.add(models.PumpReading(
                 pump_id=pid,
                 reading_date=d,
-                units=random.randint(200, 800)      # 200–800 L sold that day
+                units=round(random.uniform(100, 200),2),        # odometer reading
+                rate_per_unit=round(random.uniform(30, 50)),   # random daily price
             ))
         # diesel pumps
         for pid in (3, 4):
             db.add(models.PumpReading(
                 pump_id=pid,
                 reading_date=d,
-                units=random.randint(300, 1200)     # 300–1200 L sold that day
+                units=round(random.uniform(150, 200),2),
+                rate_per_unit=round(random.uniform(20, 30),2),
             ))
 
     db.commit()
 
-print(f"Seed complete: {span} days × 4 pumps inserted (random daily units).")
+print("Seed complete – 60 days × 4 pumps.")

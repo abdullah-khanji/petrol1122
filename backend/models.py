@@ -5,31 +5,36 @@ from pydantic import BaseModel
 
 
 Base = declarative_base()
-
 class Pump(Base):
-    __tablename__ = 'pumps'
-    id = Column(Integer, primary_key=True)
-    name = Column(String, nullable=False)
-    fuel_type = Column(String, nullable=False)
+    __tablename__ = "pumps"
+    id        = Column(Integer, primary_key=True)
+    name      = Column(String,  nullable=False)
+    fuel_type = Column(String,  nullable=False)  # petrol | diesel
 
 class PumpReading(Base):
-    __tablename__ = 'pump_readings'
-    id = Column(Integer, primary_key=True)
-    pump_id = Column(Integer, ForeignKey('pumps.id'), nullable=False)
-    reading_date = Column(Date, nullable=False)
-    units = Column(Float, nullable=False)
-
-class FuelRate(Base):
-    __tablename__ = 'fuel_rates'
-    id = Column(Integer, primary_key=True)
-    date = Column(Date, nullable=False)
-    fuel_type = Column(String, nullable=False)
-    rate_per_unit = Column(Float, nullable=False)
+    __tablename__ = "pump_readings"
+    id            = Column(Integer, primary_key=True)
+    pump_id       = Column(Integer, ForeignKey("pumps.id"), nullable=False)
+    reading_date  = Column(Date,    nullable=False)
+    units         = Column(Float,   nullable=False)  # odometer reading
+    rate_per_unit = Column(Float,   nullable=False)  # buying rate PKR/L
 
 class ReadingIn(BaseModel):
-    pump_id: int
-    reading_date: date
-    units: float
+    pump_id:       int
+    reading_date:  date
+    units:         float
+    rate_per_unit: float
+# class FuelRate(Base):
+#     __tablename__ = 'fuel_rates'
+#     id = Column(Integer, primary_key=True)
+#     date = Column(Date, nullable=False)
+#     fuel_type = Column(String, nullable=False)
+#     rate_per_unit = Column(Float, nullable=False)
+
+# class ReadingIn(BaseModel):
+#     pump_id: int
+#     reading_date: date
+#     units: float
 
 
 class BuyingUnitRate(Base):

@@ -99,75 +99,97 @@ def ok():
 
 
 
-from fastapi.encoders import jsonable_encoder
-from sqlalchemy import select, asc
 
-
-@app.get("/readings/{fuel}")        # fuel = petrol | diesel
-def readings_by_fuel(fuel: str):
-    if fuel not in {"petrol", "diesel"}:
-        raise HTTPException(400, "fuel must be petrol|diesel")
-
-    stmt = (
-        select(models.PumpReading.reading_date,
-               models.PumpReading.units)
-        .join(models.Pump, models.Pump.id == models.PumpReading.pump_id)
-        .where(models.Pump.fuel_type == fuel)
-        .order_by(models.PumpReading.reading_date.asc())
-    )
-    with database.SessionLocal() as db:
-        rows = db.execute(stmt).all()
-        return [{"date": str(d), "units": u} for d, u in rows]
-    
 from datetime import date
 from sqlalchemy import text
 
-@app.get("/report/revenue-today")
-def revenue_today():
-    """
-    Returns revenue for *today*:
-      petrol  = units_sold_today_petrol  × petrol_rate_today
-      diesel  = units_sold_today_diesel  × diesel_rate_today
-      total   = petrol + diesel
-    """
-    today = date.today()
 
-    sql = text("""
-        WITH deltas AS (
-          SELECT
-            p.fuel_type               AS fuel,
-            pr.reading_date           AS d,
-            /* today's units minus yesterday's units for this pump */
-            pr.units - COALESCE(
-               LAG(pr.units) OVER (
-                   PARTITION BY pr.pump_id ORDER BY pr.reading_date
-               ),
-               pr.units
-            ) AS units_sold
-          FROM pump_readings pr
-          JOIN pumps p ON p.id = pr.pump_id
-          WHERE pr.reading_date = :today
-        )
-        SELECT
-          d.fuel                              AS fuel_type,
-          SUM(d.units_sold * fr.rate_per_unit) AS revenue
-        FROM deltas d
-        JOIN fuel_rates fr
-             ON fr.date       = :today
-            AND fr.fuel_type  = d.fuel
-        GROUP BY d.fuel;
+SQL_BY_RATE = text("""
+SELECT
+    fr.rate_per_unit,
+    SUM(pr.units)                       AS total_units,
+    SUM(pr.units) * fr.rate_per_unit    AS total_revenue
+FROM pump_readings AS pr
+JOIN pumps        AS p  ON p.id         = pr.pump_id
+JOIN fuel_rates   AS fr ON fr.fuel_type = p.fuel_type
+                        AND fr.date    = pr.reading_date
+WHERE p.fuel_type = :fuel                     --  ←─ only the value is bound; query stays the same
+GROUP BY fr.rate_per_unit
+ORDER BY fr.rate_per_unit;
+""")
+
+sql_buy_rate=text("""
+    SELECT * FROM buying_unit_rate;
     """)
+from decimal import Decimal
+@app.get("/report/revenue-cumulative")
+def revenue_by_rate():
+    out = {"petrol": [], "diesel": []}
+    grand_units = Decimal("0")
+    grand_revenue = Decimal("0")
+    total_buy=Decimal("0")
 
-    petrol = diesel = 0.0
     with database.SessionLocal() as db:
-        for fuel, rev in db.execute(sql, {"today": today}):
-            if fuel == "petrol":
-                petrol = rev
-            else:
-                diesel = rev
+        for fuel in ("petrol", "diesel"):
+            rows = db.execute(SQL_BY_RATE, {"fuel": fuel}).all()
+            for rate, units, revenue in rows:
+                # accumulate grand totals while we iterate
+                grand_units   += Decimal(units)
+                grand_revenue += Decimal(revenue)
 
-    return {
-        "petrol": round(petrol, 2),
-        "diesel": round(diesel, 2),
-        "total":  round(petrol + diesel, 2),
+                out[fuel].append({
+                    "rate_per_unit": float(rate),
+                    "units"        : float(units),
+                    "revenue"      : float(revenue)
+                })
+    total=out["diesel"][0]['revenue']+out["petrol"][0]['revenue']
+    out["total"] = {
+        "revenue"  : float(total)
     }
+    print(out)
+    return out
+
+from sqlalchemy import select, func, and_
+
+@app.get("/readings2/{fuel}")       # fuel = petrol | diesel
+def readings_by_fuel(fuel: str):
+    if fuel not in {"petrol", "diesel"}:
+        raise HTTPException(400, "fuel must be 'petrol' or 'diesel'")
+
+    stmt = (
+        select(
+            models.PumpReading.reading_date.label("reading_date"),
+            func.sum(models.PumpReading.units).label("total_units"),
+            models.FuelRate.rate_per_unit.label("rate_per_unit")
+        )
+        # pumps → readings
+        .join(models.Pump, models.Pump.id == models.PumpReading.pump_id)
+        # fuel_rates ↔︎ (fuel_type, date)
+        .join(
+            models.FuelRate,
+            and_(
+                models.FuelRate.fuel_type == models.Pump.fuel_type,
+                models.FuelRate.date == models.PumpReading.reading_date
+            )
+        )
+        .where(models.Pump.fuel_type == fuel)                     # petrol / diesel
+        .group_by(
+            models.PumpReading.reading_date,
+            models.FuelRate.rate_per_unit
+        )
+        .order_by(models.PumpReading.reading_date.asc())
+    )
+
+    with database.SessionLocal() as db:
+        rows = db.execute(stmt).all()
+
+    # shape the API response
+    return [
+        {
+            "date": str(date),
+            "fuel_type": fuel,
+            "units": float(units),
+            "rate_per_unit": float(rate)
+        }
+        for date, units, rate in rows
+    ]
