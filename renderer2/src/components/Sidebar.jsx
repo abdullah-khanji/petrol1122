@@ -1,11 +1,11 @@
 // renderer/src/components/Sidebar.jsx
-import './Sidebar.css';
+import "./Sidebar.css";
 
 const items = [
-  { id: 'dashboard', label: 'Dashboard' },
-  { id: 'readings',  label: 'Readings'  },
-  { id: 'reports',   label: 'Reports'   },
-  { id: 'settings',  label: 'Settings'  },
+  { id: "dashboard", label: "Dashboard" },
+  { id: "readings", label: "Readings" },
+  { id: "buying", label: "Buying List" },
+  { id: "tyres", label: "Tyre Stock" },
 ];
 
 export default function Sidebar({ onSelect, current }) {
@@ -16,15 +16,12 @@ export default function Sidebar({ onSelect, current }) {
           key={i.id}
           role="button"
           className={
-            'nav-link text-white px-3 py-2 ' +
-            (current === i.id ? 'active' : 'link-light')
+            "nav-link text-white px-3 py-2 " +
+            (current === i.id ? "active" : "link-light")
           }
           onClick={() => onSelect(i.id)}
         >
-          <strong>
-            {i.label}
-          </strong>
-          
+          <strong>{i.label}</strong>
         </a>
       ))}
     </nav>

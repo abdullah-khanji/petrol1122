@@ -3,10 +3,11 @@ from datetime import date
 import models, database
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from typing import List
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func
-
+from sqlalchemy import select, func, asc
+from typing import List, OrderedDict
+from typing_extensions import Literal
+from collections import defaultdict
 import models, database
 app = FastAPI()
 # allow the Vite dev server & Electron file:// origin
@@ -74,53 +75,7 @@ def revenue_by_rate():
     out["diesel"]={"units": d_grand_units}
     return out
 
-from sqlalchemy import select, func, and_
 
-@app.get("/readings2/{fuel}")       # fuel = petrol | diesel
-def readings_by_fuel(fuel: str):
-    if fuel not in {"petrol", "diesel"}:
-        raise HTTPException(400, "fuel must be 'petrol' or 'diesel'")
-
-    stmt = (
-        select(
-            models.PumpReading.reading_date.label("reading_date"),
-            func.sum(models.PumpReading.units).label("total_units"),
-            models.FuelRate.rate_per_unit.label("rate_per_unit")
-        )
-        # pumps → readings
-        .join(models.Pump, models.Pump.id == models.PumpReading.pump_id)
-        # fuel_rates ↔︎ (fuel_type, date)
-        .join(
-            models.FuelRate,
-            and_(
-                models.FuelRate.fuel_type == models.Pump.fuel_type,
-                models.FuelRate.date == models.PumpReading.reading_date
-            )
-        )
-        .where(models.Pump.fuel_type == fuel)                     # petrol / diesel
-        .group_by(
-            models.PumpReading.reading_date,
-            models.FuelRate.rate_per_unit
-        )
-        .order_by(models.PumpReading.reading_date.asc())
-    )
-
-    with database.SessionLocal() as db:
-        rows = db.execute(stmt).all()
-
-    # shape the API response
-    return [
-        {
-            "date": str(date),
-            "fuel_type": fuel,
-            "units": float(units),
-            "rate_per_unit": float(rate)
-        }
-        for date, units, rate in rows
-    ]
-    
-    
-    
 sql_text=text("""
     WITH latest_buy AS (                   -- only PETROL purchases
     SELECT
@@ -153,7 +108,9 @@ sql_text=text("""
     WHERE p.fuel_type = :fuel                       -- ←─ filter (outer)
     ORDER BY pr.reading_date, pr.id;
     """)
-    
+
+from collections import OrderedDict      # OrderedDict keeps insertion order
+
     
 @app.get('/readings3/{fuel}')
 def getting_revenue(fuel: str):
@@ -172,21 +129,39 @@ def getting_revenue(fuel: str):
         total_revenue=round(sum(row[7] for row in rows), 2)
         total_cost= round(sum(row[6] for row in rows), 2)
         
+        totals = OrderedDict()        # date → dict of running sums
+
+        for r in rows:
+            d = r[1]                  # date string, e.g. '2025-08-06'
+
+            if d not in totals:       # initialise once per new date
+                totals[d] = {
+                    "units"         : 0.0,
+                    "selling_price" : 0.0,
+                    "cost_amount"   : 0.0,
+                    "revenue_amount": 0.0,
+                }
+
+            totals[d]["units"]          += r[3]
+            totals[d]["selling_price"]  += r[4]
+            totals[d]["cost_amount"]    += r[6]
+            totals[d]["revenue_amount"] += r[7]
+
+
+        
+    
         return {
-            "total_revenue":total_revenue,
-            "total_cost":total_cost,
-            "detail":[
-        {
-            "date": str(reading_date),
-            "fuel_type": fuel_type,
-            "units": units,
-            "recent_buy_price":recent_buy_price,
-            "selling_price":selling_price,
-            "cost_amount": float(cost_amount),
-            "revenue_amount": float(revenue_amount)
+        "total_revenue": total_revenue,
+        "total_cost": total_cost,
+        "detail": [
+            {
+                "date": d,                     # ← add a key name for the date
+                "units": s["units"],
+                "revenue_amount": s["revenue_amount"],
+            }
+            for d, s in totals.items()         # ← iterate here
+        ],
         }
-        for id, reading_date, fuel_type, units, selling_price,recent_buy_price, cost_amount, revenue_amount in rows
-    ]}
 
 
 
@@ -216,7 +191,7 @@ def latest_meters():
                 db.execute(
                     select(models.PumpReading.meter_reading)
                     .where(models.PumpReading.pump_id == pump.id)
-                    .order_by(models.PumpReading.reading_date.desc())
+                    .order_by(models.PumpReading.id.desc())
                     .limit(1)
                 ).scalar()
             ) or 0
@@ -225,7 +200,7 @@ def latest_meters():
                 db.execute(
                     select(models.PumpReading.rate_per_unit)
                     .where(models.PumpReading.pump_id == pump.id)
-                    .order_by(models.PumpReading.reading_date.desc())
+                    .order_by(models.PumpReading.id.desc())
                     .limit(1)
                 ).scalar()
             ) or 0
@@ -246,6 +221,7 @@ def latest_meters():
 def add_readings(readings: List[ReadingInput]):
     today = date.today()
     inserted = []
+    sold_by_fuel = defaultdict(float)
 
     with database.SessionLocal() as db:
         for r in readings:
@@ -260,6 +236,8 @@ def add_readings(readings: List[ReadingInput]):
                 )
 
             units = r.current_meter - r.previous_meter
+            sold_by_fuel[pump.fuel_type] += units
+            
             db.add(models.PumpReading(
                 pump_id       = r.pump_id,
                 reading_date  = today,
@@ -268,7 +246,166 @@ def add_readings(readings: List[ReadingInput]):
                 meter_reading = r.current_meter,
             ))
             inserted.append({"pump_id": r.pump_id, "units": units})
-
+        
+        # ── NEW: subtract sold units from latest buying_unit_rate row ─────────
+        for fuel, units_sold in sold_by_fuel.items():
+            db.execute(
+                text(
+                    """
+                    UPDATE buying_unit_rate
+                    SET total_units = total_units - :units_sold
+                    WHERE id = (
+                        SELECT id FROM buying_unit_rate
+                        WHERE fuel_type = :fuel
+                        ORDER BY id DESC
+                        LIMIT 1
+                    )
+                    """
+                ),
+                {"units_sold": units_sold, "fuel": fuel},
+            )
         db.commit()
 
     return {"inserted": len(inserted), "detail": inserted}    
+
+
+
+@app.get("/pump_readings")
+def list_pump_readings():
+    """
+    Full pump_readings table, joined with pump name,
+    sorted ascending by date then id.
+    """
+    with database.SessionLocal() as db:
+        stmt = (
+            select(
+                models.PumpReading.id,
+                models.PumpReading.reading_date,
+                models.PumpReading.units,
+                models.PumpReading.rate_per_unit,
+                models.PumpReading.meter_reading,
+                models.Pump.name.label("pump_name"),
+                models.Pump.fuel_type,
+            )
+            .join(models.Pump, models.Pump.id == models.PumpReading.pump_id)
+            .order_by(asc(models.PumpReading.reading_date),
+                      asc(models.PumpReading.id))
+        )
+        rows = db.execute(stmt).mappings().all()
+        return [dict(r) for r in rows]         # JSON-serialisable
+    
+
+
+class BuyingUnitIn(BaseModel):
+    date:                 date
+    fuel_type:            Literal["petrol", "diesel"]
+    buying_rate_per_unit: float
+    units:                float
+
+@app.post("/buying-unit-rate")
+def add_buying(buy: BuyingUnitIn):
+    with database.SessionLocal() as db:
+        db.add(models.BuyingUnitRate(**buy.dict()))
+        db.commit()
+    return {"status": "ok"}
+
+
+@app.get("/fuel-stock")
+def fuel_stock():
+    """
+    Return the most-recent total_units for petrol and diesel
+    from buying_unit_rate.
+    """
+    sql = text(
+        """
+        SELECT fuel_type, total_units
+        FROM buying_unit_rate b
+        WHERE (b.fuel_type, b.id) IN (
+            SELECT fuel_type, MAX(id)            -- newest row per fuel
+            FROM buying_unit_rate
+            GROUP BY fuel_type
+        )
+        """
+    )
+
+    with database.SessionLocal() as db:
+        rows = db.execute(sql).all()
+
+    # rows → [('petrol', 6000.0), ('diesel', 3000.0)]  → dict
+    return {fuel: total for fuel, total in rows}
+
+
+
+@app.get("/buying_unit_rate")
+def list_buying_unit_rate():
+    """
+    Return all purchase records ordered by date then id.
+    """
+    with database.SessionLocal() as db:
+        rows = (
+            db.query(models.BuyingUnitRate)
+              .order_by(asc(models.BuyingUnitRate.date),
+                        asc(models.BuyingUnitRate.id))
+              .all()
+        )
+        return [
+            {
+                "id"       : r.id,
+                "date"     : r.date.isoformat(),
+                "fuel_type": r.fuel_type,
+                "buying_rate_per_unit": r.buying_rate_per_unit,
+                "units"    : r.units,
+                "total_units": r.total_units,
+            }
+            for r in rows
+        ]
+    
+
+
+@app.post("/tyre/purchase")
+def add_tyre_purchase(p: models.TyrePurchaseIn):
+    with database.SessionLocal() as db:
+        db.add(models.TyreStock(
+            tyre            = p.tyre,
+            buying_price    = p.buying_price,
+            available_stock = p.units,
+            sold_units      = 0,
+        ))
+        db.commit()
+    return {"status": "ok"}
+
+
+# ── POST: record a sale (decrements stock) ---------------------------------
+@app.post("/tyre/sale")
+def tyre_sale(s: models.TyreSaleIn):
+    with database.SessionLocal() as db:
+        row = db.get(models.TyreStock, s.id)
+        if not row:
+            raise HTTPException(404, f"Tyre id {s.id} not found")
+        if s.units_sold > row.available_stock:
+            raise HTTPException(400, "Not enough stock")
+        row.available_stock -= s.units_sold
+        row.sold_units      += s.units_sold
+        db.commit()
+    return {"status": "ok"}
+
+
+# ── GET: list all tyres ----------------------------------------------------
+@app.get("/tyre_stock")
+def list_tyre_stock():
+    with database.SessionLocal() as db:
+        rows = (
+            db.query(models.TyreStock)
+              .order_by(asc(models.TyreStock.tyre))
+              .all()
+        )
+        return [
+            {
+                "id"   : r.id,
+                "tyre" : r.tyre,
+                "buying_price"   : r.buying_price,
+                "available_stock": r.available_stock,
+                "sold_units"     : r.sold_units,
+            }
+            for r in rows
+        ]

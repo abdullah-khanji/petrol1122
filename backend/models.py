@@ -53,3 +53,23 @@ def _calc_running_total(mapper, connection, target):
     ).scalar()
 
     target.total_units = (prev_total or 0) + target.units
+
+class TyreStock(Base):
+    __tablename__ = "tyre_stock"
+
+    id              = Column(Integer, primary_key=True)
+    tyre            = Column(String,  nullable=False)   # e.g. "175/70-R13"
+    buying_price    = Column(Float,   nullable=False)   # per tyre
+    available_stock = Column(Integer, nullable=False)   # current inventory
+    sold_units      = Column(Integer, nullable=False, default=0)
+
+
+# ── Pydantic payloads ------------------------------------------------------
+class TyrePurchaseIn(BaseModel):
+    tyre:            str
+    buying_price:    float
+    units:           int                                 # how many bought
+
+class TyreSaleIn(BaseModel):
+    id:              int                                 # TyreStock.id
+    units_sold:      int
