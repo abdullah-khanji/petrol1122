@@ -1,0 +1,6 @@
+/* custom.css – tiny helper to shrink labels & inputs */
+.form-sm .form-label  { font-size: .75rem; }   /* ~12 px */
+.form-sm .form-control,
+.form-sm .form-select { font-size: .75rem; padding: .15rem .35rem; height: calc(1.25rem + 0.4rem); }
+.form-sm .btn         { font-size: .75rem; padding: .20rem .45rem; }
+.table-sm thead th { font-size: .8rem; }

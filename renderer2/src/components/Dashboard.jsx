@@ -31,6 +31,7 @@ export default function Dashboard() {
   const [saveStatus, setSaveStatus] = useState("");
   const [income, setIncome] = useState({ petrol: "—", diesel: "—" });
   const [stock, setStock] = useState({ petrol: "—", diesel: "—" });
+
   const todayDMY = () => {
     const d = new Date();
     const dd = String(d.getDate()).padStart(2, "0");
@@ -130,6 +131,14 @@ export default function Dashboard() {
     const units = r.currentMeter - r.previous_meter;
     return (units * r.unitRate).toFixed(2);
   }
+  /* helpers -------------------------- */
+  const sumPetrol = rows
+    .filter((r) => r.fuel_type === "petrol")
+    .reduce((acc, r) => acc + Number(calcPKR(r)), 0);
+
+  const sumDiesel = rows
+    .filter((r) => r.fuel_type === "diesel")
+    .reduce((acc, r) => acc + Number(calcPKR(r)), 0);
 
   /* submit handler */
   function handleSubmit() {
@@ -234,7 +243,7 @@ export default function Dashboard() {
           <Line data={chart} options={options} />
         </div>
         <div className="col-6 d-flex align-items-center justify-content-center">
-          <Pie data={pieData} options={pieOpts} style={{ maxHeight: 300 }} />+{" "}
+          <Pie data={pieData} options={pieOpts} style={{ maxHeight: 300 }} />{" "}
         </div>
       </div>
 
@@ -296,11 +305,31 @@ export default function Dashboard() {
                 </tr>
               ))}
             </tbody>
+            <tfoot>
+              <tr className="fw-bold align-middle">
+                <td></td>
+                <td colSpan={4} className="text-end">
+                  Petrol PKR (Σ)
+                </td>
+                <td className="text-end">{sumPetrol.toLocaleString()}</td>
+              </tr>
+
+              <tr className="fw-bold text-end">
+                {/* leftmost cell → button */}
+                <td>
+                  <button className="btn btn-primary" onClick={handleSubmit}>
+                    Submit Readings
+                  </button>
+                </td>
+                {/* empty cells to keep grid alignment (4 + 1) */}
+                <td colSpan={4} className="text-end">
+                  Diesel PKR (Σ)
+                </td>
+                <td>{sumDiesel.toLocaleString()}</td>
+              </tr>
+            </tfoot>
           </table>
 
-          <button className="btn btn-primary" onClick={handleSubmit}>
-            Submit Readings
-          </button>
           {saveStatus && <span className="ms-3">{saveStatus}</span>}
         </div>
 

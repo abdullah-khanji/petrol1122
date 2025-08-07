@@ -6,6 +6,7 @@ const items = [
   { id: "readings", label: "Readings" },
   { id: "buying", label: "Buying List" },
   { id: "tyres", label: "Tyre Stock" },
+  { id: "loan-records", label: "Loan Records" },
 ];
 
 export default function Sidebar({ onSelect, current }) {

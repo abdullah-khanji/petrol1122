@@ -73,3 +73,34 @@ class TyrePurchaseIn(BaseModel):
 class TyreSaleIn(BaseModel):
     id:              int                                 # TyreStock.id
     units_sold:      int
+
+
+
+
+class Person(Base):
+    __tablename__ = "persons"
+    id      = Column(Integer, primary_key=True)
+    name    = Column(String,  nullable=False)
+    address = Column(String,  nullable=True)
+    phone   = Column(String,  nullable=True)
+
+class Loan(Base):
+    __tablename__ = "loans"
+    id          = Column(Integer, primary_key=True)
+    person_id   = Column(Integer, ForeignKey("persons.id"), nullable=False)
+    date        = Column(Date, nullable=False)
+    units       = Column(Float, nullable=False)
+    unit_rate   = Column(Float, nullable=False)
+    fuel_type   = Column(String, nullable=False)           # petrol | diesel
+
+class LoanIn(BaseModel):
+    person_id: int
+    date: date
+    units: float
+    unit_rate: float
+    fuel_type: str
+
+class PersonIn(BaseModel):
+    name: str
+    address: str
+    phone: int

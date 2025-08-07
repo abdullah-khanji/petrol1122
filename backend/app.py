@@ -4,7 +4,7 @@ import models, database
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func, asc
+from sqlalchemy import select, func, asc, desc
 from typing import List, OrderedDict
 from typing_extensions import Literal
 from collections import defaultdict
@@ -288,8 +288,8 @@ def list_pump_readings():
                 models.Pump.fuel_type,
             )
             .join(models.Pump, models.Pump.id == models.PumpReading.pump_id)
-            .order_by(asc(models.PumpReading.reading_date),
-                      asc(models.PumpReading.id))
+            .order_by(desc(models.PumpReading.reading_date),
+                      desc(models.PumpReading.id))
         )
         rows = db.execute(stmt).mappings().all()
         return [dict(r) for r in rows]         # JSON-serialisable
@@ -344,8 +344,8 @@ def list_buying_unit_rate():
     with database.SessionLocal() as db:
         rows = (
             db.query(models.BuyingUnitRate)
-              .order_by(asc(models.BuyingUnitRate.date),
-                        asc(models.BuyingUnitRate.id))
+              .order_by(desc(models.BuyingUnitRate.date),
+                        desc(models.BuyingUnitRate.id))
               .all()
         )
         return [
@@ -409,3 +409,63 @@ def list_tyre_stock():
             }
             for r in rows
         ]
+    
+
+@app.post("/loans")
+def add_loan(l: models.LoanIn):
+    with database.SessionLocal() as db:
+        db.add(models.Loan(**l.dict()))
+        db.commit()
+        return {"status": "ok"}
+
+# ───────── list people + totals
+@app.get("/loans/people")
+def loan_people():
+    sql = text("""
+        SELECT
+          p.id, p.name, p.address, p.phone,
+          COALESCE(SUM(l.units * l.unit_rate), 0) AS total_pkr
+        FROM persons p
+        LEFT JOIN loans l ON l.person_id = p.id
+        GROUP BY p.id
+        ORDER BY p.name;
+    """)
+    with database.SessionLocal() as db:
+        rows = db.execute(sql).fetchall()
+        return [dict(r) for r in rows]
+
+# ───────── detail for one person
+@app.get("/loans/person/{pid}")
+def loan_detail(pid: int):
+    with database.SessionLocal() as db:
+        person = db.execute(text("SELECT * FROM persons WHERE id=:pid"), {"pid": pid}).first()
+        if not person:
+            raise HTTPException(404, "Person not found")
+        loans = db.execute(text("""
+            SELECT id, date, units, unit_rate, fuel_type,
+                   (units * unit_rate) AS pkr
+            FROM loans
+            WHERE person_id = :pid
+            ORDER BY date DESC
+        """), {"pid": pid}).fetchall()
+        return {"person": dict(person), "loans": [dict(l) for l in loans]}
+    
+
+
+# ---------- create a person ----------
+@app.post("/persons")
+def create_person(p: models.PersonIn):
+    with database.SessionLocal() as db:
+        db_obj = models.Person(**p.dict())
+        db.add(db_obj)
+        db.commit()
+        db.refresh(db_obj)
+        return {"id": db_obj.id}
+
+# ---------- create a loan ----------
+@app.post("/loans")
+def add_loan(l: models.LoanIn):
+    with database.SessionLocal() as db:
+        db.add(models.Loan(**l.dict()))
+        db.commit()
+        return {"status": "ok"}

@@ -5,6 +5,9 @@ import Dashboard from "./components/Dashboard";
 import Readings from "./components/Readings";
 import BuyingList from "./components/BuyingList";
 import TyreTable from "./components/TyreTable";
+import LoanRecords from "./components/LoanRecords";
+import DetailRecord from "./components/DetailRecord";
+import "./styles/custom.css";
 
 export default function App() {
   const [view, setView] = useState("dashboard");
@@ -28,6 +31,22 @@ export default function App() {
           {view === "tyres" && (
             <h3>
               <TyreTable />
+            </h3>
+          )}
+          {view === "loan-records" && (
+            <h3>
+              <LoanRecords
+                onOpen={(pid) => setView({ page: "detail", personId: pid })}
+              />
+            </h3>
+          )}
+
+          {view === "detail" && (
+            <h3>
+              <DetailRecord
+                personId={view.personId}
+                onBack={() => setView({ page: "loan-records" })}
+              />
             </h3>
           )}
         </main>
