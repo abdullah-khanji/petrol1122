@@ -41,11 +41,11 @@ export default function App() {
             </h3>
           )}
 
-          {view === "detail" && (
+          {view.page === "detail" && (
             <h3>
               <DetailRecord
                 personId={view.personId}
-                onBack={() => setView({ page: "loan-records" })}
+                onBack={() => setView("loan-records")}
               />
             </h3>
           )}

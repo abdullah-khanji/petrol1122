@@ -411,16 +411,10 @@ def list_tyre_stock():
         ]
     
 
-@app.post("/loans")
-def add_loan(l: models.LoanIn):
-    with database.SessionLocal() as db:
-        db.add(models.Loan(**l.dict()))
-        db.commit()
-        return {"status": "ok"}
-
 # ───────── list people + totals
 @app.get("/loans/people")
 def loan_people():
+    print("oook")
     sql = text("""
         SELECT
           p.id, p.name, p.address, p.phone,
@@ -432,7 +426,8 @@ def loan_people():
     """)
     with database.SessionLocal() as db:
         rows = db.execute(sql).fetchall()
-        return [dict(r) for r in rows]
+        print(rows)
+        return [dict(r._mapping) for r in rows] 
 
 # ───────── detail for one person
 @app.get("/loans/person/{pid}")
@@ -448,7 +443,7 @@ def loan_detail(pid: int):
             WHERE person_id = :pid
             ORDER BY date DESC
         """), {"pid": pid}).fetchall()
-        return {"person": dict(person), "loans": [dict(l) for l in loans]}
+        return {"person": dict(person._mapping), "loans": [dict(l._mapping) for l in loans]}
     
 
 

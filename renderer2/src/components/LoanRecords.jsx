@@ -17,9 +17,10 @@ export default function LoanRecords({ onOpen }) {
   });
 
   /* fetch list on mount / refresh */
-  async function fetchData() {
+  async function fetchData(ignore) {
     try {
       const res = await api.get("/loans/people");
+      console.log(res.data);
       if (!ignore) setRows(res.data);
     } catch (err) {
       console.error(err);
@@ -28,14 +29,14 @@ export default function LoanRecords({ onOpen }) {
   useEffect(() => {
     let ignore = false; // optional guard for quick unmounts
 
-    fetchData();
+    fetchData(ignore);
 
     /* optional cleanup */
     return () => {
       ignore = true;
     };
   }, []);
-
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   /* ------------ submit handler ------------ */
   async function handleSubmit(e) {
     e.preventDefault();
@@ -46,7 +47,6 @@ export default function LoanRecords({ onOpen }) {
         address: form.address,
         phone: form.phone,
       });
-
       /* 2) create first loan for that person */
       await api.post("/loans", {
         person_id: person.data.id,
@@ -66,10 +66,11 @@ export default function LoanRecords({ onOpen }) {
         unit_rate: "",
         fuel_type: "petrol",
       });
-      loadPeople();
+      let ignore = false;
+      fetchData(ignore);
     } catch (err) {
       console.error(err);
-      alert("Failed to add record");
+      alert(`Failed to add record: ${err.message || err}`);
     }
   }
 
@@ -181,7 +182,7 @@ export default function LoanRecords({ onOpen }) {
       {/* ---------- PEOPLE LIST TABLE ---------- */}
       <table className="table table-sm table-bordered align-middle table-sm">
         <thead className="table-light">
-          <tr>
+          <tr className="">
             <th>Name</th>
             <th>Phone</th>
             <th>Address</th>
@@ -191,7 +192,7 @@ export default function LoanRecords({ onOpen }) {
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.id}>
+            <tr className="fw-normal fs-6" key={r.id}>
               <td>{r.name}</td>
               <td>{r.phone}</td>
               <td>{r.address}</td>

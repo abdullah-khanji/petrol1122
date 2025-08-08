@@ -11,6 +11,7 @@ export default function DetailRecord({ personId, onBack }) {
   });
 
   useEffect(() => {
+    console.log("oook", personId);
     api.get(`/loans/person/${personId}`).then((res) => setInfo(res.data));
   }, [personId]);
 
@@ -34,18 +35,22 @@ export default function DetailRecord({ personId, onBack }) {
       </button>
 
       {/* person header */}
-      <div className="card mb-3">
-        <div className="card-body">
-          <h5 className="card-title">{info.person.name}</h5>
-          <p className="mb-1">{info.person.address}</p>
-          <p className="mb-0">📞 {info.person.phone}</p>
+      <div className="col-6 my_text">
+        <div className="card mb-3">
+          <div className="card-body">
+            <h5 className="card-title mb-3">Name: {info.person.name}</h5>
+            <p className="mb-3"> Address: {info.person.address}</p>
+            <p className="mb-3">Phone: {info.person.phone}</p>
+            <p className="mb-3">Total: {info.person.phone}</p>
+          </div>
         </div>
+        <br />
+        <br />
       </div>
-
       {/* add-loan form */}
-      <form className="row g-2 align-items-end mb-4" onSubmit={addLoan}>
-        <div className="col">
-          <label className="form-label">
+      <form className="row g-2 align-items-end mb-4 form-sm" onSubmit={addLoan}>
+        <div className="col-2">
+          <label className="form-label mb-0">
             Date
             <input
               type="date"
@@ -55,8 +60,8 @@ export default function DetailRecord({ personId, onBack }) {
             />
           </label>
         </div>
-        <div className="col">
-          <label className="form-label">
+        <div className="col-2">
+          <label className="form-label mb-0">
             Units
             <input
               type="number"
@@ -66,8 +71,8 @@ export default function DetailRecord({ personId, onBack }) {
             />
           </label>
         </div>
-        <div className="col">
-          <label className="form-label">
+        <div className="col-2">
+          <label className="form-label mb-0">
             Unit Rate
             <input
               type="number"
@@ -78,8 +83,8 @@ export default function DetailRecord({ personId, onBack }) {
             />
           </label>
         </div>
-        <div className="col">
-          <label className="form-label">
+        <div className="col-2">
+          <label className="form-label mb-0 d-block">
             Fuel
             <select
               className="form-select form-select-sm"
@@ -96,6 +101,8 @@ export default function DetailRecord({ personId, onBack }) {
         </div>
       </form>
 
+      <br />
+      <br />
       {/* loans table */}
       <table className="table table-sm table-bordered">
         <thead className="table-light">
