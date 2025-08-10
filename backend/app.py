@@ -410,41 +410,77 @@ def list_tyre_stock():
             for r in rows
         ]
     
-
-# ───────── list people + totals
+# ───────── list people + totals (loan − paid)
 @app.get("/loans/people")
 def loan_people():
-    print("oook")
     sql = text("""
         SELECT
-          p.id, p.name, p.address, p.phone,
-          COALESCE(SUM(l.units * l.unit_rate), 0) AS total_pkr
+          p.id,
+          p.name,
+          p.address,
+          p.phone,
+          COALESCE(l.total_pkr, 0)  AS total_pkr,
+          COALESCE(pay.total_paid, 0) AS total_paid,
+          (COALESCE(l.total_pkr, 0) - COALESCE(pay.total_paid, 0)) AS net_total
         FROM persons p
-        LEFT JOIN loans l ON l.person_id = p.id
-        GROUP BY p.id
+        LEFT JOIN (
+          SELECT person_id, SUM(units * unit_rate) AS total_pkr
+          FROM loans
+          GROUP BY person_id
+        ) AS l  ON l.person_id = p.id
+        LEFT JOIN (
+          SELECT paid_by AS person_id, SUM(amount) AS total_paid
+          FROM payments
+          GROUP BY paid_by
+        ) AS pay ON pay.person_id = p.id
         ORDER BY p.name;
     """)
     with database.SessionLocal() as db:
         rows = db.execute(sql).fetchall()
-        print(rows)
-        return [dict(r._mapping) for r in rows] 
+        return [dict(r._mapping) for r in rows]
+
 
 # ───────── detail for one person
+# ───────── detail for one person  (UPDATED) ─────────
 @app.get("/loans/person/{pid}")
 def loan_detail(pid: int):
     with database.SessionLocal() as db:
         person = db.execute(text("SELECT * FROM persons WHERE id=:pid"), {"pid": pid}).first()
         if not person:
             raise HTTPException(404, "Person not found")
+
         loans = db.execute(text("""
             SELECT id, date, units, unit_rate, fuel_type,
                    (units * unit_rate) AS pkr
             FROM loans
             WHERE person_id = :pid
-            ORDER BY date DESC
+            ORDER BY date DESC, id DESC
         """), {"pid": pid}).fetchall()
-        return {"person": dict(person._mapping), "loans": [dict(l._mapping) for l in loans]}
-    
+
+        payments = db.execute(text("""
+            SELECT id, date, amount
+            FROM payments
+            WHERE paid_by = :pid
+            ORDER BY date DESC, id DESC
+        """), {"pid": pid}).fetchall()
+
+        # totals
+        total_loan = db.execute(
+            text("SELECT COALESCE(SUM(units*unit_rate),0) FROM loans WHERE person_id=:pid"),
+            {"pid": pid},
+        ).scalar() or 0
+
+        total_paid = db.execute(
+            text("SELECT COALESCE(SUM(amount),0) FROM payments WHERE paid_by=:pid"),
+            {"pid": pid},
+        ).scalar() or 0
+
+        return {
+            "person":   dict(person._mapping),
+            "loans":    [dict(l._mapping) for l in loans],
+            "payments": [dict(p._mapping) for p in payments],
+            "totals":   {"loan": float(total_loan), "paid": float(total_paid), "net": float(total_loan - total_paid)},
+        }
 
 
 # ---------- create a person ----------
@@ -464,3 +500,67 @@ def add_loan(l: models.LoanIn):
         db.add(models.Loan(**l.dict()))
         db.commit()
         return {"status": "ok"}
+
+
+@app.delete("/loans/{loan_id}")
+def delete_loan(loan_id: int):
+    with database.SessionLocal() as db:
+        row = db.get(models.Loan, loan_id)
+        if not row:
+            raise HTTPException(404, "Loan not found")
+        db.delete(row)
+        db.commit()
+    return {"status": "ok", "deleted_loan": loan_id}
+
+@app.delete("/persons/{pid}")
+def delete_person(pid: int):
+    with database.SessionLocal() as db:
+        person = db.get(models.Person, pid)
+        if not person:
+            raise HTTPException(404, "Person not found")
+
+        # delete all loans for this person (SQLite-safe)
+        deleted_loans = (
+            db.query(models.Loan)
+              .filter(models.Loan.person_id == pid)
+              .delete(synchronize_session=False)
+        )
+
+        db.delete(person)
+        db.commit()
+
+    return {"status": "ok", "deleted_person": pid, "deleted_loans": deleted_loans}
+
+
+@app.post("/payments")
+def add_payment(p: models.PaymentIn):
+    with database.SessionLocal() as db:
+        db.add(models.Payment(**p.dict()))
+        db.commit()
+        return {"status": "ok"}
+    
+@app.get("/payments/person/{pid}")
+def payments_for_person(pid: int):
+    with database.SessionLocal() as db:
+        rows = db.execute(
+            text("""
+                SELECT id, date, amount
+                FROM payments
+                WHERE paid_by = :pid
+                ORDER BY date DESC, id DESC
+            """),
+            {"pid": pid},
+        ).fetchall()
+        return [dict(r._mapping) for r in rows]
+    
+
+
+@app.delete("/payments/{payment_id}")
+def delete_payment(payment_id: int):
+    with database.SessionLocal() as db:
+        row = db.get(models.Payment, payment_id)
+        if not row:
+            raise HTTPException(404, "Payment not found")
+        db.delete(row)
+        db.commit()
+    return {"status": "ok", "deleted_payment": payment_id}

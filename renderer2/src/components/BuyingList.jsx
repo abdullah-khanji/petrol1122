@@ -23,25 +23,27 @@ export default function BuyingList() {
         <table className="table table-striped table-hover table-sm fs-6">
           <thead className="table-dark">
             <tr>
-              <th>Date</th>
-              <th>Fuel</th>
-              <th className="text-end">Buying&nbsp;Rate&nbsp;(₨/L)</th>
-              <th className="text-end">Units&nbsp;Bought</th>
-              <th className="text-end">Total</th>
+              <th className="text-end">ٹوٹل</th>
+              <th className="text-end">یونٹس خریدے</th>
+              <th className="text-end">خریداری رقم(₨/L)</th>
+              <th></th>
+              <th>قسم</th>
+              <th>تاریخ</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.id}>
-                <td className="fw-normal">{r.date}</td>
-                <td className="fw-normal">{r.fuel_type}</td>
-                <td className="text-end fw-normal">
-                  {r.buying_rate_per_unit.toFixed(2)}
-                </td>
-                <td className="text-end fw-normal">{r.units.toFixed(2)}</td>
                 <td className="text-end fw-normal">
                   {r.total_units.toFixed(2)}
                 </td>
+                <td className="text-end fw-normal">{r.units.toFixed(2)}</td>
+                <td className="text-end fw-normal">
+                  {r.buying_rate_per_unit.toFixed(2)}
+                </td>
+                <td></td>
+                <td className="fw-normal">{r.fuel_type}</td>
+                <td className="fw-normal">{r.date}</td>
               </tr>
             ))}
           </tbody>

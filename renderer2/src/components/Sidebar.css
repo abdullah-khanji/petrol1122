@@ -1,17 +1,17 @@
 /* renderer/src/components/Sidebar.css */
+
 .sidebar {
-  width: 200px;
-  min-height: 100vh;          /* full-height column */
+  width: 220px;
+  min-height: 100vh;
 }
 
 .sidebar .nav-link.active {
-  background-color: #0d6efd;  /* Bootstrap primary */
+  background-color: #0d6efd;
   color: #fff !important;
-  border-radius: 0.25rem;
+  border-radius: .25rem;
 }
-
 .sidebar .nav-link:hover {
-  background-color: rgba(255,255,255,0.1);
+  background-color: rgba(255,255,255,.1);
 }
 @font-face {
   font-family: 'JameelNooriNastaleeq';
@@ -31,13 +31,14 @@
 }
 
 .my_text{
-  font-size: 1rem;
+  font-size: 1.2rem;
 }
 
 
 /* custom.css – tiny helper to shrink labels & inputs */
-.form-sm .form-label  { font-size: .75rem; }   /* ~12 px */
+.form-sm .form-label  { font-size: 1rem;font-weight: bold; }   /* ~12 px */
 .form-sm .form-control,
-.form-sm .form-select { font-size: .75rem; padding: .15rem .35rem; height: calc(1.25rem + 0.4rem); }
-.form-sm .btn         { font-size: .75rem; padding: .20rem .45rem; }
-.table-sm thead th { font-size: 1rem; }
+.form-sm .form-select { font-size: 1rem;font-weight: bold; padding: .15rem .35rem; height: calc(1.25rem + 0.4rem); }
+.form-sm .btn         { font-size: 1rem;font-weight: bold; padding: .20rem .45rem; }
+.table-sm thead th { font-size: 1.3rem; }
+tr {font-size: 1rem;}

@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { Line, Pie } from "react-chartjs-2";
-import "./Sidebar.css";
 import {
   Chart as ChartJS,
   LineElement,
@@ -214,31 +213,35 @@ export default function Dashboard() {
   return (
     <>
       {/* revenue cards */}
-      <div className="row g-3 mb-4">
-        <div className="col">
-          <StatCard
-            title="Petrol Units"
-            value={cards.petrol.units}
-            note={`سٹاک : ${stock.petrol}`}
-          />
+      <div className="row g-3 mb-4 align-items-stretch">
+        {/* Left: one card that contains two half-height rows */}
+        <div className="col-4">
+          <ComboIncomeCard petrol={income.petrol} diesel={income.diesel} />
         </div>
-        <div className="col">
+
+        {/* Middle: Petrol Units (full height) */}
+        <div className="col-4">
           <StatCard
-            title="Diesel Units"
+            className="h-100"
+            style1="#f890efff"
+            title="ڈیزل یونٹس"
             value={cards.diesel.units}
             note={`سٹاک : ${stock.diesel}`}
           />
         </div>
-        <div className="col">
-          <StatCard title="income Petrol" value={income.petrol} />
-        </div>
-        <div className="col">
-          <StatCard title="income Diesel" value={income.diesel} />
+        <div className="col-4">
+          <StatCard
+            className="h-100"
+            style1="#34ece3ff"
+            title="پٹرول یونٹس"
+            value={cards.petrol.units}
+            note={`سٹاک : ${stock.petrol}`}
+          />
         </div>
       </div>
 
       {/* twin-line chart */}
-      <div className="row">
+      <div className="row mt-5">
         <div className="col-6">
           <Line data={chart} options={options} />
         </div>
@@ -309,7 +312,7 @@ export default function Dashboard() {
               <tr className="fw-bold align-middle">
                 <td></td>
                 <td colSpan={4} className="text-end">
-                  Petrol PKR (Σ)
+                  پٹرول پیسہPKR (Σ)
                 </td>
                 <td className="text-end">{sumPetrol.toLocaleString()}</td>
               </tr>
@@ -318,12 +321,12 @@ export default function Dashboard() {
                 {/* leftmost cell → button */}
                 <td>
                   <button className="btn btn-primary" onClick={handleSubmit}>
-                    Submit Readings
+                    درج ریڈنگ
                   </button>
                 </td>
                 {/* empty cells to keep grid alignment (4 + 1) */}
                 <td colSpan={4} className="text-end">
-                  Diesel PKR (Σ)
+                  ڈیزل پیسہPKR (Σ)
                 </td>
                 <td>{sumDiesel.toLocaleString()}</td>
               </tr>
@@ -399,17 +402,42 @@ export default function Dashboard() {
   );
 }
 
-function StatCard({ title, value, note }) {
-  return (
-    <div className="card">
-      {/* position-relative lets us anchor the note absolutely */}
-      <div className="card-body position-relative">
-        <h6 className="card-title text-muted">{title}</h6>
-        <h4 className="card-text">{value}</h4>
+function ComboIncomeCard({ petrol = 0, diesel = 0 }) {
+  const fmt = (v) => Number(v ?? 0).toLocaleString();
 
+  return (
+    <div className="card h-100">
+      <div className="d-flex flex-column h-100">
+        {/* top half */}
+        <div className="flex-fill d-flex align-items-center justify-content-between px-3 py-3">
+          <h4 className="mb-0">{fmt(petrol)}</h4>
+          <h6 className="mb-0 text-end fw-bold">پٹرول جمع پیسہ</h6>
+        </div>
+
+        {/* divider */}
+        <div className="border-top mx-3" />
+
+        {/* bottom half */}
+        <div className="flex-fill d-flex align-items-center justify-content-between px-3 py-3">
+          <h4 className="mb-0">{fmt(diesel)}</h4>
+          <h6 className="mb-0 text-end fw-bold">ڈیزل جمع پیسہ</h6>
+        </div>
+      </div>
+    </div>
+  );
+}
+function StatCard({ title, value, note, style1, className = "" }) {
+  return (
+    <div className={`card ${className} ${style1 ? "text-white" : "text-mute"}`}>
+      <div
+        className="card-body position-relative"
+        style={{ backgroundColor: style1 }}
+      >
+        <h6 className="card-title text-end fw-bold mb-2">{title}</h6>
+        <h4 className="card-text mb-0">{value}</h4>
         {note && (
           <small
-            className="text-muted position-absolute bottom-1 start-1 mb-2"
+            className="position-absolute bottom-1 start-1 mb-2"
             style={{ fontSize: ".75rem" }}
           >
             <b>{note}</b>

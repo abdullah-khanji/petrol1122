@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import api from "../api";
 
 export default function LoanRecords({ onOpen }) {
   /* ------------ list of rows ------------ */
   const [rows, setRows] = useState([]);
+  const [confirmId, setConfirmId] = useState(null);
 
   /* ------------ new-record form state ------------ */
   const [form, setForm] = useState({
@@ -36,8 +37,7 @@ export default function LoanRecords({ onOpen }) {
       ignore = true;
     };
   }, []);
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  /* ------------ submit handler ------------ */
+
   async function handleSubmit(e) {
     e.preventDefault();
     try {
@@ -73,69 +73,53 @@ export default function LoanRecords({ onOpen }) {
       alert(`Failed to add record: ${err.message || err}`);
     }
   }
+  async function doDeleteLoan(id) {
+    // ← rename (no confirm here)
+    try {
+      await api.delete(`/persons/${id}`);
+      let ignore = false;
+      fetchData(ignore);
+      setConfirmId(null); // reset confirm state
+    } catch (err) {
+      console.error(err);
+      alert("Failed to delete loan");
+    }
+  }
+  const grandTotal = useMemo(
+    () => rows.reduce((sum, r) => sum + Number(r.net_total || 0), 0),
+    [rows]
+  );
 
   /* ------------ render ------------ */
   return (
     <>
-      <h4 className="mb-3">Loan Records</h4>
+      <h4 className="mb-4">Loan Records</h4>
 
       {/* ---------- ADD-PERSON+LOAN FORM ---------- */}
       <form
-        className="row g-2 align-items-end mb-4 form-sm"
+        className="row g-2 mb-5 align-items-end mb-4 form-sm"
         onSubmit={handleSubmit}
       >
-        <div className="col-2">
-          <label className="form-label mb-0">
-            Name
-            <input
-              className="form-control form-control-sm"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              required
-            />
-          </label>
+        <div className="col-auto">
+          <button className="btn btn-success btn-sm">Add</button>
         </div>
-
-        <div className="col-2">
-          <label className="form-label mb-0">
-            Address
-            <input
-              className="form-control form-control-sm"
-              value={form.address}
-              onChange={(e) => setForm({ ...form, address: e.target.value })}
-              required
-            />
-          </label>
-        </div>
-
-        <div className="col-2">
-          <label className="form-label mb-0">
-            Phone
-            <input
-              className="form-control form-control-sm"
-              value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
-              required
-            />
-          </label>
-        </div>
-
-        <div className="col-2">
-          <label className="form-label mb-0">
-            Date
-            <input
-              type="date"
-              className="form-control form-control-sm"
-              value={form.date}
-              onChange={(e) => setForm({ ...form, date: e.target.value })}
-              required
-            />
+        <div className="col-1">
+          <label className="form-label mb-0 d-block">
+            قسم
+            <select
+              className="form-select form-select-sm fuel-select"
+              value={form.fuel_type}
+              onChange={(e) => setForm({ ...form, fuel_type: e.target.value })}
+            >
+              <option value="petrol">Petrol</option>
+              <option value="diesel">Diesel</option>
+            </select>
           </label>
         </div>
 
         <div className="col-1">
           <label className="form-label mb-0">
-            Units
+            یونٹس
             <input
               type="number"
               className="form-control form-control-sm"
@@ -148,7 +132,7 @@ export default function LoanRecords({ onOpen }) {
 
         <div className="col-1">
           <label className="form-label mb-0">
-            Rate
+            ریٹ
             <input
               type="number"
               step="0.01"
@@ -159,55 +143,121 @@ export default function LoanRecords({ onOpen }) {
             />
           </label>
         </div>
-
-        <div className="col-1">
-          <label className="form-label mb-0 d-block">
-            Fuel
-            <select
-              className="form-select form-select-sm fuel-select"
-              value={form.fuel_type}
-              onChange={(e) => setForm({ ...form, fuel_type: e.target.value })}
-            >
-              <option value="petrol">Petrol</option>
-              <option value="diesel">Diesel</option>
-            </select>
+        <div className="col-2">
+          <label className="form-label mb-0">
+            تاریخ
+            <input
+              type="date"
+              className="form-control form-control-sm"
+              value={form.date}
+              onChange={(e) => setForm({ ...form, date: e.target.value })}
+              required
+            />
+          </label>
+        </div>
+        <div className="col-2">
+          <label className="form-label mb-0">
+            پتہ
+            <input
+              className="form-control form-control-sm"
+              lang="ur"
+              dir="rtl"
+              value={form.address}
+              onChange={(e) => setForm({ ...form, address: e.target.value })}
+              required
+            />
           </label>
         </div>
 
-        <div className="col-auto">
-          <button className="btn btn-success btn-sm">Add</button>
+        <div className="col-2">
+          <label className="form-label mb-0">
+            فون
+            <input
+              className="form-control form-control-sm"
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              required
+            />
+          </label>
+        </div>
+        <div className="col-2">
+          <label className="form-label mb-0 text-end">
+            نام
+            <input
+              className="form-control form-control-sm"
+              lang="ur"
+              dir="rtl"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              required
+            />
+          </label>
         </div>
       </form>
 
       {/* ---------- PEOPLE LIST TABLE ---------- */}
       <table className="table table-sm table-bordered align-middle table-sm">
         <thead className="table-light">
-          <tr className="">
-            <th>Name</th>
-            <th>Phone</th>
-            <th>Address</th>
-            <th>Total PKR</th>
-            <th></th>
+          <tr>
+            <th style={{ width: 140 }}></th>
+            <th className="text-end">کل رقم</th>
+            <th className="text-end">پتہ</th>
+            <th className="text-end">فون</th>
+            <th className="text-end">نام</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
             <tr className="fw-normal fs-6" key={r.id}>
-              <td>{r.name}</td>
-              <td>{r.phone}</td>
-              <td>{r.address}</td>
-              <td>{Number(r.total_pkr).toLocaleString()}</td>
-              <td>
+              <td className="d-flex gap-2">
                 <button
                   className="btn btn-outline-primary btn-sm"
                   onClick={() => onOpen(r.id)}
                 >
-                  Details
+                  تفصیل
                 </button>
+                {confirmId !== r.id ? (
+                  <button
+                    className="btn btn-outline-danger btn-sm"
+                    onClick={() => setConfirmId(r.id)}
+                  >
+                    Delete
+                  </button>
+                ) : (
+                  <div className="btn-group btn-group-sm">
+                    <button
+                      className="btn btn-danger"
+                      onClick={() => doDeleteLoan(r.id)}
+                    >
+                      OK
+                    </button>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => setConfirmId(null)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
               </td>
+              <td className="text-end">
+                {Number(r.net_total).toLocaleString()}
+              </td>
+              <td className="text-end">{r.address}</td>
+              <td className="text-end">{r.phone}</td>
+              <td className="text-end">{r.name}</td>
             </tr>
           ))}
-        </tbody>
+        </tbody>{" "}
+        <tfoot>
+          <tr className="fw-bold">
+            {/* label before the total column */}
+            <td className="text-end">ٹوٹل قرضہ(Σ)</td>
+            <td className="text-end">{grandTotal.toLocaleString()}</td>
+            {/* empty cells to keep grid alignment */}
+            <td colSpan={3}></td>
+          </tr>
+        </tfoot>
       </table>
     </>
   );

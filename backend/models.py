@@ -104,3 +104,18 @@ class PersonIn(BaseModel):
     name: str
     address: str
     phone: int
+
+
+class Payment(Base):
+    __tablename__ = "payments"
+    id       = Column(Integer, primary_key=True)
+    paid_by  = Column(Integer, ForeignKey("persons.id"), nullable=False, index=True)
+    date     = Column(Date, nullable=False)
+    amount   = Column(Float, nullable=False)
+
+
+# Pydantic input model
+class PaymentIn(BaseModel):
+    paid_by: int
+    date: date
+    amount: float

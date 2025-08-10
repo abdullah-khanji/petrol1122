@@ -1,23 +1,23 @@
-// renderer/src/components/Sidebar.jsx
+// Sidebar.jsx
 import "./Sidebar.css";
 
 const items = [
-  { id: "dashboard", label: "Dashboard" },
-  { id: "readings", label: "Readings" },
-  { id: "buying", label: "Buying List" },
-  { id: "tyres", label: "Tyre Stock" },
-  { id: "loan-records", label: "Loan Records" },
+  { id: "dashboard", label: "ڈیش بورڈ" },
+  { id: "readings", label: "ریڈنگز" },
+  { id: "buying", label: "اسٹاک کی فہرست" },
+  { id: "tyres", label: "ٹائر اسٹاک" },
+  { id: "loan-records", label: "قرض کھاتہ" },
 ];
 
 export default function Sidebar({ onSelect, current }) {
   return (
-    <nav className="sidebar bg-dark d-flex flex-column">
+    <nav className="sidebar bg-dark border-start d-flex flex-column py-5 flex-shrink-0">
       {items.map((i) => (
         <a
           key={i.id}
           role="button"
           className={
-            "nav-link text-white px-3 py-2 " +
+            "nav-link text-white px-3 py-4 " +
             (current === i.id ? "active" : "link-light")
           }
           onClick={() => onSelect(i.id)}
